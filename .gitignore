@@ -84,6 +84,7 @@ test-output/
 
 # Sphinx documentation
 docs/_build/
+docs/build/
 
 # Pyre type checker
 .pyre/
