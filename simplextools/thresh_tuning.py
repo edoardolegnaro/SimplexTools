@@ -108,74 +108,27 @@ def generate_simplex_grid(n_classes=3, resolution=20):
         return tau_points
     
 def find_optimal_threshold(probs, labels, resolution=10, n_jobs=None, metric='accuracy'):
-    """Find the optimal threshold (tau) value on the simplex
-       that maximizes the specified metric(s).
-    
-    Args:
-        probs (np.ndarray): Probability outputs from model (n_samples, n_classes)
-        labels (np.ndarray): True class labels (n_samples,)
-        resolution (int): Grid resolution for searching tau values
-        n_jobs (int, optional): Number of parallel jobs for computation
-                               (defaults to number of CPU cores)
-        metric (str or list): Metric or list of metrics to optimize.
-                              Supported metrics are 'accuracy', 'f1', etc.
-                               (as defined in calculate_simplex_metrics)
-        
-    Returns:
-        tuple or dict: If a single metric is provided, returns a tuple:
-                       (best_tau, best_score, all_scores, all_tau_points).
-                       If a list of metrics is provided, returns a dictionary
-                       where keys are metric names and values are tuples:
-                       (best_tau, best_score, all_scores, all_tau_points).
-    """
-    # Convert to numpy if tensors
-    if isinstance(probs, torch.Tensor):
-        probs = probs.cpu().numpy()
-    if isinstance(labels, torch.Tensor):
-        labels = labels.cpu().numpy()
-    
+    """Find the optimal threshold (tau) on the simplex maximizing the given metric(s)."""
+    if isinstance(probs, torch.Tensor): probs = probs.cpu().numpy()
+    if isinstance(labels, torch.Tensor): labels = labels.cpu().numpy()
     n_classes = probs.shape[1]
-    
-    # Generate grid points in the simplex
     tau_points = generate_simplex_grid(n_classes, resolution)
-    
-    # Set up parallel processing
-    if n_jobs is None:
-        n_jobs = max(1, os.cpu_count())
+    if n_jobs is None: n_jobs = max(1, os.cpu_count())
+    metrics = [metric] if isinstance(metric, str) else metric
 
-    metrics_to_compute = [metric] if isinstance(metric, str) else metric
+    def _worker(tau, probs, labels):
+        return {m: calculate_simplex_metrics(probs, labels, tau, metric=m) for m in metrics}
 
-    # Define the worker function for p_map internally to ensure correct version is used by workers
-    def _worker_function_for_pmap(tau_param, probs_param, labels_param):
-        results = {}
-        for m in metrics_to_compute:
-            results[m] = calculate_simplex_metrics(probs_param, labels_param, tau_param, metric=m)
-        return results
-    
-    # Compute scores in parallel
-    print(f"Computing scores for {len(tau_points)} points and metrics: {metrics_to_compute}...")
-    all_results_per_tau = p_map(
-        _worker_function_for_pmap,
-        tau_points,
-        [probs] * len(tau_points),
-        [labels] * len(tau_points),
-        num_cpus=n_jobs,
-        desc=f"Evaluating thresholds for {metrics_to_compute}"
+    all_results = p_map(
+        _worker, tau_points, [probs]*len(tau_points), [labels]*len(tau_points),
+        num_cpus=n_jobs, desc=f"Evaluating thresholds for {metrics}"
     )
-    
-    # Process results
-    output_results = {}
-    for m_idx, m_name in enumerate(metrics_to_compute):
-        current_metric_scores = [res[m_name] for res in all_results_per_tau]
-        
-        best_idx = np.argmax(current_metric_scores)
-        best_tau_for_metric = tau_points[best_idx]
-        best_score_for_metric = current_metric_scores[best_idx]
-        
-        print(f"Best score for {m_name}: {best_score_for_metric:.4f} with tau={best_tau_for_metric}")
-        output_results[m_name] = (best_tau_for_metric, best_score_for_metric, current_metric_scores, tau_points)
 
-    if isinstance(metric, str): # Single metric was passed
-        return output_results[metric]
-    else: # List of metrics was passed
-        return output_results
+    results = {}
+    for m in metrics:
+        scores = [res[m] for res in all_results]
+        best_idx = np.argmax(scores)
+        results[m] = (tau_points[best_idx], scores[best_idx], scores, tau_points)
+        print(f"Best score for {m}: {scores[best_idx]:.4f} with tau={tau_points[best_idx]}")
+
+    return results[metric] if isinstance(metric, str) else results

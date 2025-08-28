@@ -165,90 +165,55 @@ def plot_points_on_simplex(
     return ax
 
 
-def plot_score_heatmap(scores, tau_points, metric="accuracy", best_tau=None, figsize=(10, 8), vmin=None, vmax=None, title=None):
-    """Create a heatmap visualization of performance metrics across the simplex.
-    
-    Args:
-        scores (np.ndarray): Array of metric values (accuracy or F1 scores)
-        tau_points (list): List of tau points in the simplex
-        metric (str): Metric type, either "accuracy" or "f1" (default: "accuracy")
-        best_tau (np.ndarray, optional): The best tau value
-        figsize (tuple): Figure size
-        vmin (float, optional): Minimum value for colorbar
-        vmax (float, optional): Maximum value for colorbar
-        title (str, optional): Plot title
-        
-    Returns:
-        tuple: (fig, best_tau, best_score)
-    """
-    # Validate metric type
+def plot_score_heatmap(
+    scores, tau_points, metric="accuracy", best_tau=None, figsize=(10, 8),
+    vmin=None, vmax=None, title=None, ax=None, cmap='plasma',
+    show_vertices=True, show_standard_tau=True, show_best_tau=True,
+    legend_loc='upper right', colorbar_kwargs=None, scatter_kwargs=None,
+    label_fontsize=16
+):
+    """Heatmap of metric values across the simplex."""
     if metric not in ["accuracy", "f1"]:
         raise ValueError("Metric must be either 'accuracy' or 'f1'")
-    
-    # Find the best tau if not provided
     if best_tau is None:
         best_idx = np.argmax(scores)
         best_tau = tau_points[best_idx]
         best_score = scores[best_idx]
     else:
         best_score = scores[np.argmax(scores)]
-    
-    # Define simplex vertices in 2D
-    v1 = np.array([0, 0])               # Bottom-left corner
-    v2 = np.array([1, 0])               # Bottom-right corner
-    v3 = np.array([0.5, np.sqrt(3)/2])  # Top corner
-    
-    # Convert tau points to cartesian coordinates
+
+    v1, v2, v3 = np.array([0, 0]), np.array([1, 0]), np.array([0.5, np.sqrt(3)/2])
     points_2d = barycentric_to_cartesian(np.array(tau_points))
-    
-    # Create the triangulation for irregular grid
     tri = Triangulation(points_2d[:, 0], points_2d[:, 1])
-    
-    # Define color normalization and colormap
-    # Adjust vmin to your specific needs based on the data
-    if vmin is None:
-        vmin = max(0.5, np.min(scores) - 0.05)  # More flexible lower bound for F1
-    if vmax is None:
-        vmax = min(1.0, np.max(scores) + 0.01)  # Cap at 1.0
-    
+    vmin = vmin if vmin is not None else max(0.5, np.min(scores) - 0.05)
+    vmax = vmax if vmax is not None else min(1.0, np.max(scores) + 0.01)
     norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
-    cmap = plt.cm.plasma
-    
-    # Create the figure and axis
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    # Plot the heatmap using triangulation
+    cmap = plt.get_cmap(cmap)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
     contour = ax.tripcolor(tri, scores, cmap=cmap, norm=norm, shading='gouraud')
-    
-    # Add a colorbar
-    cbar = fig.colorbar(contour, ax=ax)
+    cbar = fig.colorbar(contour, ax=ax, **(colorbar_kwargs or {}))
     metric_label = "Accuracy" if metric == "accuracy" else "Macro F1 Score"
-    cbar.set_label(metric_label, rotation=270, labelpad=20)
-    
-    # Mark the simplex vertices
-    ax.scatter([v1[0], v2[0], v3[0]], [v1[1], v2[1], v3[1]], c='black', s=50)
-    
-    # Mark the standard point (1/3, 1/3, 1/3)
+    cbar.set_label(metric_label, rotation=270, labelpad=20, fontsize=label_fontsize)
+    if show_vertices:
+        ax.scatter([v1[0], v2[0], v3[0]], [v1[1], v2[1], v3[1]], c='black', s=50)
     std_tau = np.array([1/3, 1/3, 1/3])
     std_2d = std_tau[0] * v1 + std_tau[1] * v2 + std_tau[2] * v3
-    ax.scatter(std_2d[0], std_2d[1], c='red', s=100, marker='o', 
-              edgecolor='white', linewidth=1, label='Standard τ = [1/3, 1/3, 1/3]')
-    
-    # Mark the best tau
+    if show_standard_tau:
+        ax.scatter(
+            std_2d[0], std_2d[1], c='red', s=100, marker='o', edgecolor='white', linewidth=1,
+            label='Standard τ = [1/3, 1/3, 1/3]', **(scatter_kwargs or {})
+        )
     best_2d = best_tau[0] * v1 + best_tau[1] * v2 + best_tau[2] * v3
-    ax.scatter(best_2d[0], best_2d[1], c='lime', s=150, marker='*', 
-              edgecolor='white', linewidth=1.5, 
-              label=f'Best τ = [{best_tau[0]:.2f}, {best_tau[1]:.2f}, {best_tau[2]:.2f}]')
-    
-    # Add legend
-    ax.legend(loc='upper right')
-    
-    # Set title and axis properties
-    if title:
-        plt.title(title, fontsize=16)
-    else:
-        plt.title(f"{metric_label} Across Simplex", fontsize=16)
+    if show_best_tau:
+        ax.scatter(
+            best_2d[0], best_2d[1], c='lime', s=150, marker='*', edgecolor='white', linewidth=1.5,
+            label=f'Best τ = [{best_tau[0]:.2f}, {best_tau[1]:.2f}, {best_tau[2]:.2f}]', **(scatter_kwargs or {})
+        )
+    ax.legend(loc=legend_loc)
+    ax.set_title(title or f"{metric_label} Across Simplex", fontsize=label_fontsize)
     ax.set_aspect('equal')
     ax.axis('off')
-    
     return fig, best_tau, best_score
