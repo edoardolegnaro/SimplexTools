@@ -9,12 +9,11 @@ from sklearn.metrics import f1_score
 
 def get_simplex_predictions(probs_np_func, tau_np_func):
     """
-    Compute predictions based on a probability threshold vector on the simplex.
+    Computes predictions using the multidimensional threshold rule from the paper.
 
-    For each sample, this function checks if any class probability exceeds its
-    corresponding threshold from tau. If one or more do, it selects the class
-    with the highest probability among those that exceed the threshold. If none
-    exceed, the class with the overall highest probability is chosen.
+    A sample is classified to the class 'j' that maximizes the margin, 
+    defined as (probability[j] - threshold[j]). This is mathematically
+    equivalent to the rule: z^j - z^k > τ^j - τ^k for all k != j.
 
     Args:
         probs_np_func (np.ndarray): Array of probability outputs (n_samples, n_classes).
@@ -23,18 +22,7 @@ def get_simplex_predictions(probs_np_func, tau_np_func):
     Returns:
         np.ndarray: Array of predicted class indices for each sample.
     """
-    n_samples = probs_np_func.shape[0]
-    predictions_np = np.zeros(n_samples, dtype=int)
-    for i_pred in range(n_samples):
-        exceeds_threshold = probs_np_func[i_pred] > tau_np_func
-        if np.any(exceeds_threshold):
-            candidates = np.where(exceeds_threshold)[0]
-            predictions_np[i_pred] = candidates[
-                np.argmax(probs_np_func[i_pred][candidates])
-            ]
-        else:
-            predictions_np[i_pred] = np.argmax(probs_np_func[i_pred])
-    return predictions_np
+    return np.argmax(probs_np_func - tau_np_func, axis=1)
 
 
 def argmax_accuracy(probs, labels):
