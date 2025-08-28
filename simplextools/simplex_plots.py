@@ -20,34 +20,17 @@ def get_barycentric_coordinates():
     return v0, v1, v2
 
 def barycentric_to_cartesian(points_bary):
-    """Convert barycentric coordinates to 2D Cartesian coordinates.
-    
-    Args:
-        points_bary (np.ndarray or list/tuple): Array of shape (n_points, 3) or a single 
-                                             point (3,) with barycentric coordinates.
-        
-    Returns:
-        np.ndarray: Array of shape (n_points, 2) with Cartesian coordinates.
-    """
+    """Convert barycentric coordinates to 2D Cartesian coordinates."""
     v0, v1, v2 = get_barycentric_coordinates()
-    
-    if not isinstance(points_bary, np.ndarray):
-        points_bary = np.array(points_bary)
-    
+    verts = np.stack([v0, v1, v2], axis=0)
+
+    points_bary = np.asarray(points_bary)
     if points_bary.ndim == 1:
-        # Reshape single point to (1, 3) for consistent processing
         points_bary = points_bary.reshape(1, -1)
-    
     if points_bary.shape[1] != 3:
         raise ValueError("Barycentric points must have 3 coordinates.")
-
-    # Perform the transformation: P_cartesian = c0*v0 + c1*v1 + c2*v2
-    cartesian_points = np.zeros((points_bary.shape[0], 2))
-    for i in range(points_bary.shape[0]):
-        cartesian_points[i] = points_bary[i, 0] * v0 + \
-                              points_bary[i, 1] * v1 + \
-                              points_bary[i, 2] * v2
-    return cartesian_points
+    
+    return points_bary @ verts
 
 def pca_project_to_2d(points):
     """Project high-dimensional points to 2D using PCA-like approach for simplex visualization"""
@@ -69,13 +52,13 @@ def pca_project_to_2d(points):
 
 def plot_barycentric_point(
     tau: np.ndarray,
-    label_map: dict[int,str] | None = None,
-    point_kwargs: dict | None = None,
-    vertex_kwargs: dict | None = None,
-    ax: plt.Axes | None = None,
+    label_map: dict[int, str] = None,
+    point_kwargs: dict = None,
+    vertex_kwargs: dict = None,
+    ax: plt.Axes = None,
     show_regions: bool = False,
     region_n: int = 200,
-    region_colors: list[str] | None = None,
+    region_colors: list[str] = None,
     region_alpha: float = 0.3,
     show_outline: bool = True
 ) -> plt.Axes:
@@ -99,55 +82,43 @@ def plot_barycentric_point(
 
     # --- Add validation check ---
     if not np.isclose(np.sum(tau), 1.0):
-        raise ValueError(f"Input tau must sum to 1, but received {tau} which sums to {np.sum(tau)}")
-    # Add check for non-negativity if required
+        raise ValueError(f"tau must sum to 1, got {tau} (sum={np.sum(tau)})")
     if not np.all(tau >= 0):
-         raise ValueError(f"Input tau components must be non-negative, but received {tau}")
+        raise ValueError(f"tau components must be non-negative, got {tau}")
     # --- End validation check ---
 
-    verts = np.array([[0,0], [1,0], [0.5, np.sqrt(3)/2]])
+    verts = np.array([[0, 0], [1, 0], [0.5, np.sqrt(3) / 2]])
     if ax is None:
-        fig, ax = plt.subplots(figsize=(5,5))
+        _, ax = plt.subplots(figsize=(5, 5))
 
     if show_regions:
-        # pastel defaults
-        region_colors = region_colors or ["lightcoral","lightgreen","lightskyblue"]
-        b1g, b2g = np.meshgrid(np.linspace(0,1,region_n),
-                               np.linspace(0,1,region_n))
+        region_colors = region_colors or ["lightcoral", "lightgreen", "lightskyblue"]
+        b1g, b2g = np.meshgrid(np.linspace(0, 1, region_n), np.linspace(0, 1, region_n))
         b3g = 1 - b1g - b2g
-        mask = (b1g>=0)&(b2g>=0)&(b3g>=0)
+        mask = (b1g >= 0) & (b2g >= 0) & (b3g >= 0)
         b1, b2, b3 = b1g[mask], b2g[mask], b3g[mask]
-        pts = np.vstack([b1,b2,b3]).T @ verts
-        x1,x2,x3 = tau
-        r1 = (b1-b2 > x1-x2) & (b1-b3 > x1-x3)
-        r2 = (b2-b1 > x2-x1) & (b2-b3 > x2-x3)
-        r3 = (b3-b1 > x3-x1) & (b3-b2 > x3-x2)
-        ax.scatter(pts[r1,0], pts[r1,1], s=6, color=region_colors[0], alpha=region_alpha)
-        ax.scatter(pts[r2,0], pts[r2,1], s=6, color=region_colors[1], alpha=region_alpha)
-        ax.scatter(pts[r3,0], pts[r3,1], s=6, color=region_colors[2], alpha=region_alpha)
+        pts = np.vstack([b1, b2, b3]).T @ verts
+        x1, x2, x3 = tau
+        r1 = (b1 - b2 > x1 - x2) & (b1 - b3 > x1 - x3)
+        r2 = (b2 - b1 > x2 - x1) & (b2 - b3 > x2 - x3)
+        r3 = (b3 - b1 > x3 - x1) & (b3 - b2 > x3 - x2)
+        ax.scatter(pts[r1, 0], pts[r1, 1], s=6, color=region_colors[0], alpha=region_alpha)
+        ax.scatter(pts[r2, 0], pts[r2, 1], s=6, color=region_colors[1], alpha=region_alpha)
+        ax.scatter(pts[r3, 0], pts[r3, 1], s=6, color=region_colors[2], alpha=region_alpha)
 
     if show_outline:
-        # triangle outline
-        tri = plt.Polygon(verts, fill=False, edgecolor='k', lw=1.5)
-        ax.add_patch(tri)
-
-        # vertex labels nudged outwards
-        vk = vertex_kwargs or {}
+        ax.add_patch(plt.Polygon(verts, fill=False, edgecolor='k', lw=1.5))
         if label_map:
             center = verts.mean(axis=0)
             shift = 0.05
+            vk = vertex_kwargs or {}
             for i, v in enumerate(verts):
-                dir_vec = v - center
-                dir_vec /= np.linalg.norm(dir_vec)
-                pos = v + dir_vec * shift
-                ax.text(pos[0], pos[1], label_map.get(i, str(i)),
-                        ha='center', va='center', **vk)
+                pos = v + (v - center) / np.linalg.norm(v - center) * shift
+                ax.text(pos[0], pos[1], label_map.get(i, str(i)), ha='center', va='center', **vk)
 
-    # plot the point
-    pk = point_kwargs or {"c":"C0","s":80}
+    pk = point_kwargs or {"c": "C0", "s": 80}
     p = tau @ verts
     ax.scatter(p[0], p[1], **pk)
-
     ax.set_aspect('equal')
     ax.grid(False)
     ax.axis('off')
