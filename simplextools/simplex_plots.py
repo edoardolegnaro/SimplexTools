@@ -124,93 +124,40 @@ def plot_barycentric_point(
     ax.axis('off')
     return ax
 
-def plot_points_on_simplex(probs_bary, labels=None, ax=None, class_colors=None, 
-                           label_map=None, tau=None, marker_size=5, data_alpha=0.7,
-                           region_alpha=0.2, tau_marker_kwargs=None):
-    """Plot multiple data points on the probability simplex, optionally showing
-    decision regions defined by a 'tau' threshold.
-
-    Args:
-        probs_bary (np.ndarray): Probability outputs for data points (n_samples, 3).
-        labels (np.ndarray, optional): True class labels for data points.
-        ax (matplotlib.axes.Axes, optional): Axis to plot on.
-        class_colors (dict, optional): Mapping from class indices to colors for data points
-                                     and for deriving region colors.
-        label_map (dict, optional): Mapping from class indices to labels for simplex vertices.
-        tau (np.ndarray, optional): Barycentric threshold (3,) to display and define regions.
-                                  Defaults to (1/3, 1/3, 1/3) if None.
-        marker_size (float): Size of markers for data points.
-        data_alpha (float): Alpha for data points.
-        region_alpha (float): Alpha for decision regions.
-        tau_marker_kwargs (dict, optional): Matplotlib kwargs for the tau marker.
-        
-    Returns:
-        matplotlib.axes.Axes: The axis with the plot.
-    """
+def plot_points_on_simplex(
+    probs_bary, labels=None, ax=None, class_colors=None, label_map=None, tau=None,
+    marker_size=5, data_alpha=0.7, region_alpha=0.2, tau_marker_kwargs=None
+):
+    """Plot multiple data points on the probability simplex, optionally showing decision regions."""
     if probs_bary.shape[1] != 3:
         raise ValueError("Input probabilities must be for a 3-class problem.")
-
     if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 8.6)) # Adjusted for aspect ratio
-
-    # Default class colors for data points if not provided
-    if class_colors is None:
-        class_colors = {0: 'red', 1: 'green', 2: 'blue'} # Bright defaults for points
-    
-    if label_map is None: # For vertex labels
-        label_map = {0: 'Class 0', 1: 'Class 1', 2: 'Class 2'}
-
-    # Point that defines the regions: tau or default barycenter
-    region_defining_point_bary = tau if tau is not None else np.array([1/3, 1/3, 1/3])
-    
-    # Base colors for regions, derived from class_colors for consistency
-    # Fallback to light versions if class_colors are very dark or not fully specified
-    _default_region_bases = ['lightcoral', 'lightgreen', 'lightblue'] 
-    prepared_region_base_colors = [
-        class_colors.get(0, _default_region_bases[0]),
-        class_colors.get(1, _default_region_bases[1]),
-        class_colors.get(2, _default_region_bases[2])
-    ]
-    
-    # Marker style for tau (if provided)
-    if tau_marker_kwargs is None:
-        tau_marker_kwargs = {'c': 'black', 's': 130, 'marker': '*', 'edgecolor': 'white', 'linewidth': 1.5, 'zorder': 10}
-    
-    # Marker style for default barycenter (if tau is None)
-    default_center_marker_kwargs = {'c': 'dimgray', 's': 100, 'marker': 'o', 'edgecolor': 'white', 'linewidth': 1, 'zorder': 10}
-
-    # Draw simplex outline, labels, regions, and the tau/center marker
+        _, ax = plt.subplots(figsize=(10, 8.6))
+    class_colors = class_colors or {0: 'red', 1: 'green', 2: 'blue'}
+    label_map = label_map or {0: 'Class 0', 1: 'Class 1', 2: 'Class 2'}
+    region_point = tau if tau is not None else np.array([1/3, 1/3, 1/3])
+    region_bases = ['lightcoral', 'lightgreen', 'lightblue']
+    region_colors = [class_colors.get(i, region_bases[i]) for i in range(3)]
+    tau_marker_kwargs = tau_marker_kwargs or {'c': 'black', 's': 130, 'marker': '*', 'edgecolor': 'white', 'linewidth': 1.5, 'zorder': 10}
+    center_marker_kwargs = {'c': 'dimgray', 's': 100, 'marker': 'o', 'edgecolor': 'white', 'linewidth': 1, 'zorder': 10}
     ax = plot_barycentric_point(
-        point_bary=region_defining_point_bary,
-        ax=ax,
-        label_map=label_map,
-        show_regions=True,
-        region_alpha=region_alpha,
-        region_colors_input=prepared_region_base_colors,
-        point_kwargs=tau_marker_kwargs if tau is not None else default_center_marker_kwargs,
+        point_bary=region_point, ax=ax, label_map=label_map, show_regions=True,
+        region_alpha=region_alpha, region_colors_input=region_colors,
+        point_kwargs=tau_marker_kwargs if tau is not None else center_marker_kwargs,
         show_outline=True
     )
-
-    # Plot all data points (probs_bary)
     points_cartesian = barycentric_to_cartesian(probs_bary)
-
     if labels is not None:
-        unique_labels = sorted(np.unique(labels)) # Sort for consistent legend order
-        plotted_labels = []
-        for label_val in unique_labels:
-            if label_val not in class_colors: # Skip if no color defined for this label
+        for label_val in sorted(np.unique(labels)):
+            if label_val not in class_colors:
                 print(f"Warning: No color defined in class_colors for label {label_val}. Skipping these points.")
                 continue
             mask = (labels == label_val)
             ax.scatter(points_cartesian[mask, 0], points_cartesian[mask, 1],
-                       color=class_colors[label_val], 
-                       s=marker_size, alpha=data_alpha, marker='.', zorder=3,
-                       label=label_map.get(label_val, f"Class {label_val}"))
-            plotted_labels.append(label_val)
-        if plotted_labels: # Add legend if any points were plotted
-             ax.legend(loc='upper left', bbox_to_anchor=(1.01, 1), borderaxespad=0.)
-
-    else: # Plot all points in a single default color if no labels
+                       color=class_colors[label_val], s=marker_size, alpha=data_alpha,
+                       marker='.', zorder=3, label=label_map.get(label_val, f"Class {label_val}"))
+        ax.legend(loc='upper left', bbox_to_anchor=(1.01, 1), borderaxespad=0.)
+    else:
         ax.scatter(points_cartesian[:, 0], points_cartesian[:, 1],
                    color='gray', s=marker_size, alpha=data_alpha, marker='.', zorder=3)
     
