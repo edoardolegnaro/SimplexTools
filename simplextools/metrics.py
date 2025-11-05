@@ -67,9 +67,12 @@ def calculate_simplex_metrics(probs, labels, tau, metric="accuracy"):
         raise ValueError("Metric must be either 'accuracy' or 'f1'")
 
     # Convert to numpy if needed
-    for arr in (probs, labels, tau):
-        if isinstance(arr, torch.Tensor):
-            arr = arr.cpu().numpy()
+    if isinstance(probs, torch.Tensor):
+        probs = probs.cpu().numpy()
+    if isinstance(labels, torch.Tensor):
+        labels = labels.cpu().numpy()
+    if isinstance(tau, torch.Tensor):
+        tau = tau.cpu().numpy()
 
     predictions = get_simplex_predictions(probs, tau)
     if metric == "accuracy":
